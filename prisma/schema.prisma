@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// SIMPLIFIED SCHEMA (NO AI DEPENDENCIES)
+// SQLite Compatible
+// ==========================================
+
+model User {
+  id String @id @default(cuid())
+  username String @unique
+  email String? @unique
+  name String?
+  
+  // Profile & Privacy
+  profileVisibility String @default("PUBLIC")
+  bio String?
+  avatar String?
+  website String?
+  
+  // Stats
+  totalItems Int @default(0)
+  booksCount Int @default(0)
+  papersCount Int @default(0)
+  articlesCount Int @default(0)
+  streakDays Int @default(0)
+  lastReadDate DateTime?
+  
+  // Relations
+  items Item[]
+  followers Follow[] @relation("Following")
+  following Follow[] @relation("Follower")
+  accounts Account[]
+  sessions Session[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Item {
+  id String @id @default(cuid())
+  userId String
+  
+  // Core metadata
+  type String
+  title String
+  author String?
+  url String?
+  coverImage String?
+  publishedYear Int?
+  
+  // User interaction
+  status String @default("READ")
+  rating Int?
+  notes String?
+  readDate DateTime?
+  addedAt DateTime @default(now())
+  
+  // Discovery & social
+  isPublic Boolean @default(true)
+  viewCount Int @default(0)
+  tags ItemTag[]
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Flexible metadata
+  metadata Json @default("{}")
+}
+
+model Tag {
+  id String @id @default(cuid())
+  name String
+  slug String
+  color String @default("#3B82F6")
+  userId String
+  
+  @@unique([userId, slug])
+  items ItemTag[]
+}
+
+model ItemTag {
+  itemId String
+  tagId String
+  
+  @@id([itemId, tagId])
+  
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+}
+
+model Follow {
+  followerId String
+  followingId String
+  createdAt DateTime @default(now())
+  
+  @@id([followerId, followingId])
+  
+  follower User @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Follower", fields: [followingId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id String @id @default(cuid())
+  userId String
+  type String
+  provider String
+  providerAccountId String
+  refresh_token String?
+  access_token String?
+  expires_at Int?
+  token_type String?
+  scope String?
+  id_token String?
+  session_state String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id String @id @default(cuid())
+  sessionToken String @unique
+  userId String
+  expires DateTime
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token String @unique
+  expires DateTime
+
+  @@unique([identifier, token])
+}

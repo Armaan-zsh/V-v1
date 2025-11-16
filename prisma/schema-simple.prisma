@@ -1,0 +1,250 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// SIMPLIFIED SCHEMA (NO AI DEPENDENCIES)
+// ==========================================
+
+model User {
+  id String @id @default(cuid())
+  username String @unique @db.VarChar(39) // Twitter-style limit
+  email String? @unique
+  name String? @db.VarChar(100)
+  
+  // Profile & Privacy
+  profileVisibility ProfileVisibility @default(PUBLIC)
+  bio String? @db.Text
+  avatar String? @db.Text
+  website String? @db.Text
+  
+  // Stats (denormalized for performance)
+  totalItems Int @default(0)
+  booksCount Int @default(0)
+  papersCount Int @default(0)
+  articlesCount Int @default(0)
+  streakDays Int @default(0)
+  lastReadDate DateTime?
+  
+  // Relations
+  items Item[]
+  followers Follow[] @relation("Following")
+  following Follow[] @relation("Follower")
+  accounts Account[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Indexes
+  @@index([username, email])
+  @@index([createdAt])
+}
+
+model Item {
+  id String @id @default(cuid())
+  userId String
+  
+  // Core metadata
+  type ItemType
+  title String @db.VarChar(500)
+  author String? @db.VarChar(500)
+  url String? @db.Text
+  coverImage String? @db.Text
+  publishedYear Int?
+  
+  // User interaction
+  status ReadingStatus @default(READ)
+  rating Int? @range(1, 5)
+  notes String? @db.Text
+  readDate DateTime?
+  addedAt DateTime @default(now())
+  
+  // Discovery & social
+  isPublic Boolean @default(true)
+  viewCount Int @default(0)
+  tags ItemTag[]
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Flexible metadata
+  metadata Json @default("{}") // {isbn: "...", doi: "...", journal: "..."}
+  
+  // Indexes for search
+  @@index([userId, addedAt(sort: Desc)])
+  @@index([userId, type])
+  @@index([title(ops: raw("gin_trgm_ops"))]) // Trigram search
+  @@index([status])
+}
+
+// ==========================================
+// TAGS SYSTEM (MANUAL ONLY - NO AI)
+// ==========================================
+
+model Tag {
+  id String @id @default(cuid())
+  name String @db.VarChar(50)
+  slug String @db.VarChar(50)
+  color String @default("#3B82F6") @db.VarChar(7)
+  userId String // Tags are user-specific
+  
+  @@unique([userId, slug])
+  @@index([userId])
+}
+
+model ItemTag {
+  itemId String
+  tagId String
+  
+  @@id([itemId, tagId])
+  @@index([itemId])
+  @@index([tagId])
+}
+
+// Predefined interests/categories
+model Interest {
+  id String @id @default(cuid())
+  name String @unique
+  slug String @unique
+  category String // "academic", "fiction", "tech", "self-help"
+  
+  @@index([category])
+}
+
+model UserInterest {
+  userId String
+  interestId String
+  createdAt DateTime @default(now())
+  
+  @@id([userId, interestId])
+  @@index([userId])
+  @@index([interestId])
+}
+
+// ==========================================
+// SOCIAL FEATURES
+// ==========================================
+
+model Follow {
+  followerId String
+  followingId String
+  createdAt DateTime @default(now())
+  
+  @@id([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// ==========================================
+// READING LISTS & COLLECTIONS
+// ==========================================
+
+model ReadingList {
+  id String @id @default(cuid())
+  userId String
+  name String @db.VarChar(100)
+  description String? @db.Text
+  isPublic Boolean @default(true)
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items ReadingListItem[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId])
+}
+
+model ReadingListItem {
+  id String @id @default(cuid())
+  listId String
+  itemId String
+  addedAt DateTime @default(now())
+  position Int @default(0)
+  
+  @@id([listId, itemId])
+  @@index([listId])
+  @@index([itemId])
+}
+
+// Enums
+enum ItemType { 
+  BOOK 
+  PAPER 
+  ARTICLE 
+}
+
+enum ReadingStatus { 
+  WANT_TO_READ 
+  READING 
+  READ 
+  ABANDONED 
+}
+
+enum ProfileVisibility { 
+  PUBLIC 
+  UNLISTED 
+  PRIVATE 
+}
+
+// ==========================================
+// NEXTAUTH MODELS
+// ==========================================
+
+model Account {
+  id String @id @default(cuid())
+  userId String
+  type String
+  provider String
+  providerAccountId String
+  refresh_token String? @db.Text
+  access_token String? @db.Text
+  expires_at Int?
+  token_type String?
+  scope String?
+  id_token String? @db.Text
+  session_state String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id String @id @default(cuid())
+  sessionToken String @unique
+  userId String
+  expires DateTime
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token String @unique
+  expires DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==========================================
+// MIGRATION NOTES
+// ==========================================
+
+// To migrate from AI-enabled schema:
+// 1. Backup your current database
+// 2. Drop existing tables: DROP SCHEMA public CASCADE; CREATE SCHEMA public;
+// 3. Run: npx prisma migrate dev --name init
+// 4. Re-import your data manually (or create fresh)
+//
+// Or create new database for fresh start:
+// 1. Create new database with this schema
+// 2. Set DATABASE_URL to new DB
+// 3. Run: npm run prisma:migrate
+// ==========================================
